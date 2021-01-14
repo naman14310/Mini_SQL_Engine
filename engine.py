@@ -304,20 +304,20 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
     tbls = ""
     ws = ""
 
+    for i in range(0, len(tokens)):
+        if "where" in tokens[i]:
+            ws = tokens[i]
+            break
+
     flag_AND = False
 
     if(flag_D):
         cols = tokens[2]
         tbls = tokens[4]
 
-        if(flag_W):
-            ws = tokens[5]
     else:
         cols = tokens[1]
         tbls = tokens[3]
-
-        if(flag_W):
-            ws = tokens[4]
 
     cols = cols.replace(" ", "")
     coloums = cols.split(",")
@@ -452,10 +452,10 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
         else:
             sort_col = (tokens[tid].replace(" ", ""))[:-4]
 
-        print(sort_col)
+        #print(sort_col)
 
         if sort_col not in coloums:
-            print("\nmysql> Please enter correct coloumn in order by clause")
+            print("\nmysql> Please write correct syntax for order by clause")
             return
 
         sort_col_idx = 0
@@ -465,12 +465,8 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
                 sort_col_idx = i
                 break
         
-        print(sort_col_idx)
-        print(asc)
-
-        for r in result:
-            print(r)
-
+        #print(sort_col_idx)
+        #print(asc)
         if asc:
             result.sort(key=lambda x:x[sort_col_idx])
         else:
@@ -541,21 +537,21 @@ def parse_query(query):
         #group_by()
 
     elif (tokens[1][:3].lower() in aggregate) or (tokens[1][:5].lower() in aggregate):
-        print("\n-> Aggregate query")
+        #print("\n-> Aggregate query")
         aggregate_query(tokens)
 
     else: 
         if tokens[1] == "distinct":
             kwrd_distinct = True
-            print("\n-> Distinct query")
+            #print("\n-> Distinct query")
         
         if "where" in query:
             kwrd_where = True
-            print("\n-> Where query")
+            #print("\n-> Where query")
 
         if re.search("order.*by", query):
             kwrd_order_by = True
-            print("\n-> Order by query")
+            #print("\n-> Order by query")
 
         execute_query(tokens, kwrd_distinct, kwrd_order_by, kwrd_where)
         
