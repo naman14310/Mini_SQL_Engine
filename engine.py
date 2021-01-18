@@ -298,15 +298,104 @@ def filter_where_cond(data, conditions, tables, flag):
 
 #-----------------------------------------------------------------------------------------------------------------------------#
 
-def execute_query(tokens, flag_D, flag_O, flag_W):
+def do_aggregate(ag, function):
+    
+    if(function=="sum"):
+        return sum(ag)
+
+    elif(function=="min"):
+        return min(ag)
+
+    elif(function=="max"):
+        return max(ag)
+
+    elif(function=="count"):
+        return len(ag)
+
+    elif(function=="avg"):
+        return float(sum(ag))/float(len(ag))
+
+    else:
+        print("\nmysql> Please enter correct Aggregate function")
+        sys.exit()
+
+#-----------------------------------------------------------------------------------------------------------------------------#
+
+def process_group_by(data, ag_list, cols, gby_col, tables):
+
+    if gby_col not in cols:
+        print("\nmysql> Please mention correct coloum in group by clause.\n")
+        sys.exit()
+
+    if ag_list.count("none")>1:
+        print("\nmysql> Incorrect query syntax for group by clause.\n")
+        sys.exit()
+
+    gby_col_idx = get_col_index_in_cp(gby_col, tables)
+
+    #print("gb col idx : " + str(gby_col_idx))
+    final_group_by = {}
+
+    for i in range (0,len(cols)):
+        if ag_list[i]=="none":
+            continue
+        else:
+            cl = cols[i]
+            idx = get_col_index_in_cp(cl, tables)
+            groupDict = {}
+            for row in data:
+                if row[gby_col_idx] not in groupDict.keys():
+                    #print("chal ja yrrr")
+                    #print(row[gby_col_idx])
+                    groupDict[row[gby_col_idx]] = []
+                groupDict[row[gby_col_idx]].append(row[idx])
+            
+            for k in groupDict.keys():
+                resp = do_aggregate(groupDict[k], ag_list[i])
+                if k not in final_group_by.keys():
+                    final_group_by[k] = []
+                final_group_by[k].append(resp)
+
+    
+    data_after_groupby = []
+
+    for key in final_group_by.keys():
+        lirow = []
+        lirow.append(key)
+        lirow.extend(final_group_by[key])
+        data_after_groupby.append(lirow)
+    
+    #print("---------------------------------------------------------------------------")
+
+   # for rum in data_after_groupby:
+     #   print(rum)
+    
+    #print("---------------------------------------------------------------------------")
+    #sys.exit()
+    return data_after_groupby
+
+#-----------------------------------------------------------------------------------------------------------------------------#
+
+def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
     
     cols = ""
     tbls = ""
     ws = ""
+    gb = ""
 
     for i in range(0, len(tokens)):
         if "where" in tokens[i]:
             ws = tokens[i]
+            break
+
+    for i in range(0, len(tokens)):
+        if re.search("group.*by", tokens[i]):
+            t = tokens[i]
+            t = t.replace(" ", "")
+            if len(t)>7:
+                gb = t[7:]
+            else:
+                gb = tokens[i+1]
             break
 
     flag_AND = False
@@ -324,6 +413,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
     tbls = tbls.replace(" ", "")
     tables = tbls.split(",")
     ws = (ws.replace(" ",""))[5:]
+    gby_col = gb.replace(" ", "")
     #print(ws)
 
     where_cond = []
@@ -349,8 +439,29 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
         for t in tables:
             for c in meta[t]:
                 coloums.append(c)
-    #print(coloums)
-    #print(tables)
+
+    ag_list = []
+    cl_list = []
+    for cag in coloums:
+        if check_for_aggregate(cag) == 3:
+            cag = cag.replace(" ","")
+            ag_list.append(cag[:3])
+            cl_list.append(cag[4:-1])
+        elif check_for_aggregate(cag) == 5:
+            cag = cag.replace(" ","")
+            ag_list.append(cag[:5])
+            cl_list.append(cag[6:-1])
+        else:
+            cag = cag.replace(" ","")
+            ag_list.append("none")
+            cl_list.append(cag)
+
+
+    coloums = cl_list
+
+    print(coloums)
+    print(tables)
+    print(ag_list)
 
     for t in tables:
         if t not in meta.keys():
@@ -380,6 +491,10 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
     for c in coloums:
         col_idx_list.append(get_col_index_in_cp(c, tables))
 
+
+    #print(len(res_data))
+   # for r in res_data:
+     #   print(r)
     #print(col_idx_list)
     
     result = []
@@ -400,11 +515,23 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
             print("\nmysql> 0 Rows matched with the condition.\n")
             sys.exit()
 
-        for row in fd:
-            li = []
-            for idx in col_idx_list:
-                li.append(row[idx])
-            fd1.append(li)
+       # print("*******************************************************************")
+
+      #  for rums in fd:
+       #     print(rums)
+
+       # print("*******************************************************************")
+
+        if flag_G:
+            fd = process_group_by(fd, ag_list, coloums, gby_col, tables)
+            fd1 = fd
+
+        else:
+            for row in fd:
+                li = []
+                for idx in col_idx_list:
+                    li.append(row[idx])
+                fd1.append(li)
 
         if flag_D:
             for row in fd1:
@@ -418,11 +545,15 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
     else:
         fd1 = []
 
-        for row in res_data:
-            li = []
-            for idx in col_idx_list:
-                li.append(row[idx])
-            fd1.append(li)
+        if flag_G:
+            fd1 = process_group_by(res_data, ag_list, coloums, gby_col, tables)
+
+        else:
+            for row in res_data:
+                li = []
+                for idx in col_idx_list:
+                    li.append(row[idx])
+                fd1.append(li)
 
         if flag_D:
             for row in fd1:
@@ -511,6 +642,117 @@ def execute_query(tokens, flag_D, flag_O, flag_W):
     '''
 #-----------------------------------------------------------------------------------------------------------------------------#
 
+def check_for_aggregate(col):
+
+    ag1 = col[:3]
+    ag2 = col[:5]
+
+    if ag1 in aggregate:
+        return 3
+    elif ag2 in aggregate:
+        return 5
+    else:
+        return 0
+
+#-----------------------------------------------------------------------------------------------------------------------------#
+
+'''def execute_group_by(tokens, flag_D, flag_O):
+    
+    cols = ""
+    tbls = ""
+    gb = ""
+
+    for i in range(0, len(tokens)):
+        if re.search("group.*by", tokens[i]):
+            t = tokens[i]
+            t = t.replace(" ", "")
+            if len(t)>7:
+                gb = t[7:]
+            else:
+                gb = tokens[i+1]
+            break
+
+    if(flag_D):
+        cols = tokens[2]
+        tbls = tokens[4]
+
+    else:
+        cols = tokens[1]
+        tbls = tokens[3]
+
+    cols = cols.replace(" ", "")
+    coloums = cols.split(",")
+    tbls = tbls.replace(" ", "")
+    tables = tbls.split(",")
+    gby_col = gb.replace(" ", "")
+
+    #print(gby_col)
+
+    if coloums[0] == "*":
+        coloums = []
+        for t in tables:
+            for c in meta[t]:
+                coloums.append(c)
+    
+    ag_list = []
+    cl_list = []
+    for cag in coloums:
+        if check_for_aggregate(cag) == 3:
+            cag = cag.replace(" ","")
+            ag_list.append(cag[:3])
+            cl_list.append(cag[4:-1])
+        elif check_for_aggregate(cag) == 5:
+            cag = cag.replace(" ","")
+            ag_list.append(cag[:5])
+            cl_list.append(cag[6:-1])
+        else:
+            cag = cag.replace(" ","")
+            ag_list.append("none")
+            cl_list.append(cag)
+
+    coloums = cl_list
+
+    #print(coloums)
+    #print(tables)
+    #print(ag_list)
+
+    for t in tables:
+        if t not in meta.keys():
+            print("\nmysql> Please enter correct table names.")
+            return
+
+    for c in coloums:
+        br = False
+        for t in tables:
+            if c in meta[t]:
+                br = True
+                break
+        if br==False:
+            print("\nmysql> Please enter correct coloumn names.")
+            return
+
+    no_of_tables = len(tables)
+
+    res_data = load_data(tables[0])
+
+    if no_of_tables>1:
+        for i in range(1,no_of_tables):
+            tbi = load_data(tables[i])
+            res_data = cartisan_product(res_data, tbi)
+
+    col_idx_list = []
+    for c in coloums:
+        col_idx_list.append(get_col_index_in_cp(c, tables))
+
+    print(len(res_data))
+    for r in res_data:
+        print(r)
+    #print(col_idx_list)
+
+'''
+
+#-----------------------------------------------------------------------------------------------------------------------------#
+
 def parse_query(query):
 
     #print("\nquery : " + query)
@@ -531,29 +773,29 @@ def parse_query(query):
     kwrd_distinct = False
     kwrd_order_by = False
     kwrd_where = False
+    kwrd_group_by = False
+
+    if tokens[1] == "distinct":
+        kwrd_distinct = True
+
+    if re.search("order.*by", query):
+        kwrd_order_by = True
+
+    if "where" in query:
+        kwrd_where = True
 
     if re.search("group.*by", query):
-        print("\n-> Group by query")
+        kwrd_group_by = True
+        #print("\n-> Group by query")
+        #execute_group_by(tokens, kwrd_distinct, kwrd_order_by)
         #group_by()
 
-    elif (tokens[1][:3].lower() in aggregate) or (tokens[1][:5].lower() in aggregate):
+    if (tokens[1][:3].lower() in aggregate) or (tokens[1][:5].lower() in aggregate) and kwrd_group_by == False:
         #print("\n-> Aggregate query")
         aggregate_query(tokens)
 
     else: 
-        if tokens[1] == "distinct":
-            kwrd_distinct = True
-            #print("\n-> Distinct query")
-        
-        if "where" in query:
-            kwrd_where = True
-            #print("\n-> Where query")
-
-        if re.search("order.*by", query):
-            kwrd_order_by = True
-            #print("\n-> Order by query")
-
-        execute_query(tokens, kwrd_distinct, kwrd_order_by, kwrd_where)
+        execute_query(tokens, kwrd_distinct, kwrd_order_by, kwrd_where, kwrd_group_by)
         
         
 #-----------------------------------------------------------------------------------------------------------------------------#
