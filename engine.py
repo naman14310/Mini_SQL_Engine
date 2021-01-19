@@ -92,63 +92,38 @@ def get_col(col, tableName, data):
         li.append(int(row[idx]))
     return li
 
-#-----------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------#
 
-def aggregate_query(tokens):
+def aggregate_query(data, ag_list, cols, tables):
 
-    function = ""
-    col = ""
-    tableName = tokens[-1]
-    if tokens[1][3]!='(':
-        function = "count"
-        col = tokens[1][6:-1]
-    else:
-        function = tokens[1][:3]
-        col = tokens[1][4:-1]
+    final_res = []
 
-    if col=="*":
-        col = meta[tableName][0]
+    for i in range (0,len(cols)):
+        c = cols[i]
+        function = ag_list[i]
+        if function=="count" and c=="*":
+            final_res.append(len(data))
+            continue
 
-    #print(function + " | " + col + " | " + tableName)
+        idx = get_col_index_in_cp(c, tables)
 
-    if tableName not in meta.keys():
-        print("\nmysql> Table " + tableName + " not present in database.\n")
-        return
+        vec = []
+        for row in data:
+            vec.append(row[idx])
+        
+        res = do_aggregate(vec, function)
+        final_res.append(res)
 
-    if col not in meta[tableName]:
-        print("\nmysql> Column " + col + " does not exist in " + tableName + ".\n")
-        return 
-
-    data = load_data(tableName)
-    #print(data)
-
-    idx = get_col_index(col, tableName)
-    #print(idx)
-
-    ag = []
-
-    for row in data:
-        ag.append(int(row[idx]))
-
-    print(ag)
-    
-    if(function=="sum"):
-        print("\nmysql> " + str(sum(ag)) + "\n")
-
-    elif(function=="min"):
-        print("\nmysql> " + str(min(ag)) + "\n")
-
-    elif(function=="max"):
-        print("\nmysql> " + str(max(ag)) + "\n")
-
-    elif(function=="count"):
-        print("\nmysql> " + str(len(ag)) + "\n")
-
-    elif(function=="avg"):
-        print("\nmysql> " + str(float(sum(ag))/float(len(ag))) + "\n")
-
-    else:
-        print("\nmysql> Please enter correct Aggregate function")
+    print("\nmysql> Query result : ")
+    print() 
+    for i in range (0,len(cols)):
+        col_name = ag_list[i] + "(" + cols[i] + ")"
+        print(col_name.upper(), end = "\t\t ")
+    print()
+    for rs in final_res:
+        print(rs, end = "\t\t")
+    print()
+    print()
 
 #-----------------------------------------------------------------------------------------------------------------------------#
 
@@ -399,6 +374,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             break
 
     flag_AND = False
+    flag_Agg = False
 
     if(flag_D):
         cols = tokens[2]
@@ -459,6 +435,16 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
 
     coloums = cl_list
 
+    for aitr in ag_list:
+        stag = aitr.replace(" ", "")
+        if stag != "none":
+            flag_Agg = True
+
+    for aitr in ag_list:
+        if flag_Agg==True and flag_G==False and aitr=="none":
+            print("\nmysql> Invalid query syntax.")
+            return
+
     print(coloums)
     print(tables)
     print(ag_list)
@@ -471,7 +457,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
     for c in coloums:
         br = False
         for t in tables:
-            if c in meta[t]:
+            if c in meta[t] or c=="*":
                 br = True
                 break
         if br==False:
@@ -490,12 +476,6 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
     col_idx_list = []
     for c in coloums:
         col_idx_list.append(get_col_index_in_cp(c, tables))
-
-
-    #print(len(res_data))
-   # for r in res_data:
-     #   print(r)
-    #print(col_idx_list)
     
     result = []
 
@@ -515,12 +495,10 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             print("\nmysql> 0 Rows matched with the condition.\n")
             sys.exit()
 
-       # print("*******************************************************************")
+        if flag_Agg == True and flag_G == False:
+            aggregate_query(fd, ag_list, coloums, tables)
+            return
 
-      #  for rums in fd:
-       #     print(rums)
-
-       # print("*******************************************************************")
 
         if flag_G:
             fd = process_group_by(fd, ag_list, coloums, gby_col, tables)
@@ -544,6 +522,10 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
 
     else:
         fd1 = []
+
+        if flag_Agg == True and flag_G == False:
+            aggregate_query(res_data, ag_list, coloums, tables)
+            return
 
         if flag_G:
             fd1 = process_group_by(res_data, ag_list, coloums, gby_col, tables)
@@ -656,103 +638,6 @@ def check_for_aggregate(col):
 
 #-----------------------------------------------------------------------------------------------------------------------------#
 
-'''def execute_group_by(tokens, flag_D, flag_O):
-    
-    cols = ""
-    tbls = ""
-    gb = ""
-
-    for i in range(0, len(tokens)):
-        if re.search("group.*by", tokens[i]):
-            t = tokens[i]
-            t = t.replace(" ", "")
-            if len(t)>7:
-                gb = t[7:]
-            else:
-                gb = tokens[i+1]
-            break
-
-    if(flag_D):
-        cols = tokens[2]
-        tbls = tokens[4]
-
-    else:
-        cols = tokens[1]
-        tbls = tokens[3]
-
-    cols = cols.replace(" ", "")
-    coloums = cols.split(",")
-    tbls = tbls.replace(" ", "")
-    tables = tbls.split(",")
-    gby_col = gb.replace(" ", "")
-
-    #print(gby_col)
-
-    if coloums[0] == "*":
-        coloums = []
-        for t in tables:
-            for c in meta[t]:
-                coloums.append(c)
-    
-    ag_list = []
-    cl_list = []
-    for cag in coloums:
-        if check_for_aggregate(cag) == 3:
-            cag = cag.replace(" ","")
-            ag_list.append(cag[:3])
-            cl_list.append(cag[4:-1])
-        elif check_for_aggregate(cag) == 5:
-            cag = cag.replace(" ","")
-            ag_list.append(cag[:5])
-            cl_list.append(cag[6:-1])
-        else:
-            cag = cag.replace(" ","")
-            ag_list.append("none")
-            cl_list.append(cag)
-
-    coloums = cl_list
-
-    #print(coloums)
-    #print(tables)
-    #print(ag_list)
-
-    for t in tables:
-        if t not in meta.keys():
-            print("\nmysql> Please enter correct table names.")
-            return
-
-    for c in coloums:
-        br = False
-        for t in tables:
-            if c in meta[t]:
-                br = True
-                break
-        if br==False:
-            print("\nmysql> Please enter correct coloumn names.")
-            return
-
-    no_of_tables = len(tables)
-
-    res_data = load_data(tables[0])
-
-    if no_of_tables>1:
-        for i in range(1,no_of_tables):
-            tbi = load_data(tables[i])
-            res_data = cartisan_product(res_data, tbi)
-
-    col_idx_list = []
-    for c in coloums:
-        col_idx_list.append(get_col_index_in_cp(c, tables))
-
-    print(len(res_data))
-    for r in res_data:
-        print(r)
-    #print(col_idx_list)
-
-'''
-
-#-----------------------------------------------------------------------------------------------------------------------------#
-
 def parse_query(query):
 
     #print("\nquery : " + query)
@@ -786,16 +671,8 @@ def parse_query(query):
 
     if re.search("group.*by", query):
         kwrd_group_by = True
-        #print("\n-> Group by query")
-        #execute_group_by(tokens, kwrd_distinct, kwrd_order_by)
-        #group_by()
 
-    if (tokens[1][:3].lower() in aggregate) or (tokens[1][:5].lower() in aggregate) and kwrd_group_by == False:
-        #print("\n-> Aggregate query")
-        aggregate_query(tokens)
-
-    else: 
-        execute_query(tokens, kwrd_distinct, kwrd_order_by, kwrd_where, kwrd_group_by)
+    execute_query(tokens, kwrd_distinct, kwrd_order_by, kwrd_where, kwrd_group_by)
         
         
 #-----------------------------------------------------------------------------------------------------------------------------#
