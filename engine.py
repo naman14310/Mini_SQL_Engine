@@ -94,7 +94,7 @@ def get_col(col, tableName, data):
 
 #----------------------------------------------------------------------------------------------------------------------------#
 
-def aggregate_query(data, ag_list, cols, tables):
+def aggregate_query(data, ag_list, cols, tables, flag_D):
 
     final_res = []
 
@@ -108,8 +108,14 @@ def aggregate_query(data, ag_list, cols, tables):
         idx = get_col_index_in_cp(c, tables)
 
         vec = []
-        for row in data:
-            vec.append(row[idx])
+
+        if flag_D:
+            for row in data:
+                if row[idx] not in vec:
+                    vec.append(row[idx])
+        else:
+            for row in data:
+                vec.append(row[idx])
         
         res = do_aggregate(vec, function)
         final_res.append(res)
@@ -432,7 +438,6 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             ag_list.append("none")
             cl_list.append(cag)
 
-
     coloums = cl_list
 
     for aitr in ag_list:
@@ -496,11 +501,16 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             sys.exit()
 
         if flag_Agg == True and flag_G == False:
-            aggregate_query(fd, ag_list, coloums, tables)
+            aggregate_query(fd, ag_list, coloums, tables, flag_D)
             return
 
 
         if flag_G:
+
+            for i in range(0, len(coloums)):
+                if ag_list[i]=="count" and coloums[i]=='*':
+                    coloums[i] = gby_col
+
             fd = process_group_by(fd, ag_list, coloums, gby_col, tables)
             fd1 = fd
 
@@ -524,10 +534,14 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
         fd1 = []
 
         if flag_Agg == True and flag_G == False:
-            aggregate_query(res_data, ag_list, coloums, tables)
+            aggregate_query(res_data, ag_list, coloums, tables, flag_D)
             return
 
         if flag_G:
+            for i in range(0, len(coloums)):
+                if ag_list[i]=="count" and coloums[i]=='*':
+                    coloums[i] = gby_col
+
             fd1 = process_group_by(res_data, ag_list, coloums, gby_col, tables)
 
         else:
@@ -584,7 +598,6 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             result.sort(key=lambda x:x[sort_col_idx])
         else:
             result.sort(key=lambda x:x[sort_col_idx], reverse=True)
-        #result = sorted(result,key=lambda x: x[sort_col_idx])
 
         print("\nmysql> Query result :\n")
         for c in coloums:
@@ -625,7 +638,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
 #-----------------------------------------------------------------------------------------------------------------------------#
 
 def check_for_aggregate(col):
-
+    
     ag1 = col[:3]
     ag2 = col[:5]
 
