@@ -54,7 +54,10 @@ def load_data(tableName):
     for r in data:
         li = []
         for item in r:
-            li.append(int(item))
+            if item[0]=="\"" or item[0]=="\'":
+                li.append(int(item[1:-1]))
+            else:
+                li.append(int(item))
         data1.append(li)
     return data1
 
@@ -94,7 +97,7 @@ def get_col(col, tableName, data):
 
 #----------------------------------------------------------------------------------------------------------------------------#
 
-def aggregate_query(data, ag_list, cols, tables):
+def aggregate_query(data, ag_list, cols, tables, flag_D):
 
     final_res = []
 
@@ -102,14 +105,27 @@ def aggregate_query(data, ag_list, cols, tables):
         c = cols[i]
         function = ag_list[i]
         if function=="count" and c=="*":
-            final_res.append(len(data))
+            if flag_D:
+                data1 = []
+                for row in data:
+                    if row not in data1:
+                        data1.append(row)
+                final_res.append(len(data1))
+            else:
+                final_res.append(len(data))
             continue
 
         idx = get_col_index_in_cp(c, tables)
 
         vec = []
-        for row in data:
-            vec.append(row[idx])
+
+        if flag_D:
+            for row in data:
+                if row[idx] not in vec:
+                    vec.append(row[idx])
+        else:
+            for row in data:
+                vec.append(row[idx])
         
         res = do_aggregate(vec, function)
         final_res.append(res)
@@ -216,7 +232,7 @@ def filter_where_cond(data, conditions, tables, flag):
     if len(conditions)==1:
         cond_col = conditions[0][0]
         op = conditions[0][2]
-        num_constraint = int(conditions[0][1])
+        comp = conditions[0][1]
         #print(cond_col)
         #print(op)
         #print(num_constraint)
@@ -224,12 +240,21 @@ def filter_where_cond(data, conditions, tables, flag):
         if is_col_exist(cond_col, tables)==False:
             print("\nmysql> Please mention correct coloum in where condition.\n")
             sys.exit()
-
-        idx = get_col_index_in_cp(cond_col, tables)
         
-        for row in data:
-            if satisfy_cond(int(row[idx]), num_constraint, op):
-                filtered_data.append(row)
+        if is_col_exist(comp, tables)==False:
+            num_constraint = int(comp)
+            idx = get_col_index_in_cp(cond_col, tables)
+            
+            for row in data:
+                if satisfy_cond(int(row[idx]), num_constraint, op):
+                    filtered_data.append(row)
+
+        else:
+            idx = get_col_index_in_cp(cond_col, tables)
+            idx2 = get_col_index_in_cp(comp, tables)
+            for row in data:
+                if satisfy_cond(int(row[idx]), int(row[idx2]), op):
+                    filtered_data.append(row)
 
     else:
         cond_col1 = conditions[0][0]
@@ -306,8 +331,21 @@ def process_group_by(data, ag_list, cols, gby_col, tables):
         print("\nmysql> Incorrect query syntax for group by clause.\n")
         sys.exit()
 
-    gby_col_idx = get_col_index_in_cp(gby_col, tables)
+    apdkey = False
+    keyid = 0
 
+    for i in range(0, len(cols)):
+        if ag_list[i]=="none":
+            keyid = i
+            if cols[i]==gby_col:
+                apdkey = True
+                break
+            else:
+                print("\nmysql> Incorrect query syntax for group by clause.\n")
+                sys.exit()
+
+
+    gby_col_idx = get_col_index_in_cp(gby_col, tables)
     #print("gb col idx : " + str(gby_col_idx))
     final_group_by = {}
 
@@ -320,8 +358,6 @@ def process_group_by(data, ag_list, cols, gby_col, tables):
             groupDict = {}
             for row in data:
                 if row[gby_col_idx] not in groupDict.keys():
-                    #print("chal ja yrrr")
-                    #print(row[gby_col_idx])
                     groupDict[row[gby_col_idx]] = []
                 groupDict[row[gby_col_idx]].append(row[idx])
             
@@ -336,15 +372,14 @@ def process_group_by(data, ag_list, cols, gby_col, tables):
 
     for key in final_group_by.keys():
         lirow = []
-        lirow.append(key)
         lirow.extend(final_group_by[key])
+        if apdkey:
+            lirow.insert(keyid, key)
         data_after_groupby.append(lirow)
     
     #print("---------------------------------------------------------------------------")
-
    # for rum in data_after_groupby:
      #   print(rum)
-    
     #print("---------------------------------------------------------------------------")
     #sys.exit()
     return data_after_groupby
@@ -357,6 +392,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
     tbls = ""
     ws = ""
     gb = ""
+    star = -1
 
     for i in range(0, len(tokens)):
         if "where" in tokens[i]:
@@ -444,9 +480,9 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             print("\nmysql> Invalid query syntax.")
             return
 
-    print(coloums)
-    print(tables)
-    print(ag_list)
+    #print(coloums)
+    #print(tables)
+    #print(ag_list)
 
     for t in tables:
         if t not in meta.keys():
@@ -495,11 +531,16 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             sys.exit()
 
         if flag_Agg == True and flag_G == False:
-            aggregate_query(fd, ag_list, coloums, tables)
+            aggregate_query(fd, ag_list, coloums, tables, flag_D)
             return
 
-
         if flag_G:
+
+            for i in range(0, len(coloums)):
+                if ag_list[i]=="count" and coloums[i]=='*':
+                    coloums[i] = gby_col
+                    star = i
+
             fd = process_group_by(fd, ag_list, coloums, gby_col, tables)
             fd1 = fd
 
@@ -523,10 +564,15 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
         fd1 = []
 
         if flag_Agg == True and flag_G == False:
-            aggregate_query(res_data, ag_list, coloums, tables)
+            aggregate_query(res_data, ag_list, coloums, tables, flag_D)
             return
 
         if flag_G:
+            for i in range(0, len(coloums)):
+                if ag_list[i]=="count" and coloums[i]=='*':
+                    coloums[i] = gby_col
+                    star = i
+
             fd1 = process_group_by(res_data, ag_list, coloums, gby_col, tables)
 
         else:
@@ -573,7 +619,7 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
         sort_col_idx = 0
 
         for i in range(0, len(coloums)):
-            if coloums[i]==sort_col:
+            if coloums[i]==sort_col and i!=star:
                 sort_col_idx = i
                 break
         
@@ -583,11 +629,15 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             result.sort(key=lambda x:x[sort_col_idx])
         else:
             result.sort(key=lambda x:x[sort_col_idx], reverse=True)
-        #result = sorted(result,key=lambda x: x[sort_col_idx])
 
         print("\nmysql> Query result :\n")
-        for c in coloums:
-            print(c.upper(), end = "\t\t ")
+        for i in range (0,len(coloums)):
+            cname = coloums[i].upper()
+            if star==i:
+                cname = "*"
+            if ag_list[i]!="none":
+                cname = ag_list[i].upper() + "(" + cname + ")"
+            print(cname, end = "\t\t ")
         print()
         for row in result:
             for val in row:
@@ -596,8 +646,13 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
         
     else:
         print("\nmysql> Query result :\n")
-        for c in coloums:
-            print(c.upper(), end = "\t\t ")
+        for i in range (0,len(coloums)):
+            cname = coloums[i].upper()
+            if star==i:
+                cname = "*"
+            if ag_list[i]!="none":
+                cname = ag_list[i].upper() + "(" + cname + ")"
+            print(cname, end = "\t\t ")
         print()
         for row in result:
             for val in row:
@@ -643,6 +698,9 @@ def parse_query(query):
 
     if query[-1]==";":
         query = query[:-1]
+    else:
+        print("\nmysql> Semicolon is missing after the query.\n")
+        return 
 
     parsed  = sqlparse.parse(query)
     stmt = parsed[0]
@@ -652,7 +710,7 @@ def parse_query(query):
     for tkn in stmt.tokens:
         if str(tkn) != " ":
             tokens.append(str(tkn))
-    print(tokens)
+    #print(tokens)
     
     kwrd_distinct = False
     kwrd_order_by = False
