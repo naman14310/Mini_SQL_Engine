@@ -53,10 +53,9 @@ def load_data(tableName):
     for r in data:
         li = []
         for item in r:
-            if item[0]=="\"" or item[0]=="\'":
-                li.append(int(item[1:-1]))
-            else:
-                li.append(int(item))
+            item = item.replace("\"","")
+            item = item.replace("\'","")
+            li.append(int(item))
         data1.append(li)
     return data1
 
@@ -127,7 +126,7 @@ def aggregate_query(data, ag_list, cols, tables, flag_D):
     colop = ""
     for i in range (0,len(cols)):
         col_name = ag_list[i] + "(" + cols[i] + ")"
-        colop += col_name.upper() + ", "
+        colop += col_name.lower() + ", "
         #print(col_name.upper(), end = "\t\t ")
     print(colop[:-2])
     print()
@@ -313,7 +312,12 @@ def do_aggregate(ag, function):
 
 def process_group_by(data, ag_list, cols, gby_col, tables):
 
-    if gby_col not in cols:
+    total_cols = []
+    for tb in tables:
+        for c in meta[tb]:
+            total_cols.append(c)
+
+    if gby_col not in total_cols:
         print("\nmysql> Please mention correct coloum in group by clause.\n")
         sys.exit()
 
@@ -618,14 +622,14 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
 
         colop = ""
         for i in range (0,len(coloums)):
-            cname = coloums[i].upper()
+            cname = coloums[i].lower()
             tname = get_table_name(cname)
             if star==i:
                 cname = "*"
             if ag_list[i]!="none":
-                cname = ag_list[i].upper() + "(" + cname.upper() + ")"
+                cname = ag_list[i].lower() + "(" + cname.lower() + ")"
             else:
-                cname = tname.upper() + "." + cname.upper()
+                cname = tname.lower() + "." + cname.lower()
             colop += cname + ", "
         
         print(colop[:-2])
@@ -648,9 +652,9 @@ def execute_query(tokens, flag_D, flag_O, flag_W, flag_G):
             if star==i:
                 cname = "*"
             if ag_list[i]!="none":
-                cname = ag_list[i].upper() + "(" + cname.upper() + ")"
+                cname = ag_list[i].lower() + "(" + cname.lower() + ")"
             else:
-                cname = tname.upper() + "." + cname.upper()
+                cname = tname.lower() + "." + cname.lower()
             colop += cname + ", "
         print(colop[:-2])
         print()
